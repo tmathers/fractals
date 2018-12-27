@@ -1,0 +1,485 @@
+<html>
+<head>
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+
+<script type="text/javascript">
+
+/***********************************************************************
+ * tree.js
+ * Written by Tara Mathers, 2010 
+ * ---------------------------------------------------------------------
+ *  
+ * *********************************************************************/     
+
+ 
+ /******************************************
+ * initialize()
+ * Initial function called on page load
+ *****************************************/
+
+function initialize() {
+	// Global variables:
+	
+	CANVAS_WIDTH = 700;
+	CANVAS_HEIGHT = 500;
+	
+	REFRESH_RATE = 100;
+
+		// Create canvas and context objects
+	canvas = document.getElementById('canvas');	
+	context = canvas.getContext('2d');
+	
+
+	plant = new Plant();
+	
+	plant.init();
+	
+}
+
+function Plant() {
+
+	
+	this.MAX_LEVEL = 8;
+	
+	this.level = 8;
+	
+	this.HEIGHT = 350;			// Initial branch height
+	
+	this.LEFT_ALPHA = 0.43;		// How much the branches get shorter each iteration
+	this.RIGHT_ALPHA = 0.43; 		// lower = faster decrease
+	
+	this.LEFT_ANGLE = 30;
+	this.RIGHT_ANGLE = 30;
+	
+	this.RANDOMNESS = 10;
+	
+	this.LEAF_COLOR = "rgb(156,214,170)";
+	this.STEM_COLOR = "rgb(48,85,20)";
+		
+	this.LEAF_LEVELS = 3;			// number of leaf levels
+	this.MAX_LEAF_OFFSET = 0; 	// Max leaf offset from stem
+	this.MAX_LEAF_SIZE = 150;	// Max leaf size in px
+	
+	
+	this.MIDDLE_HEIGHT_FACTOR = 1.75; 
+	
+	this.GROWTH_RATE = 0.2; // How fast HEIGHT increases as the plant grows
+	
+	this.MAX_STEM_WIDTH = 6;
+	
+
+	this.checkImage = function checkFlag() {
+		if ( ! this.imageLoaded ) {
+			window.setTimeout(this.checkImage.bind(this), 100);
+		} 
+		
+    }
+this.init = function() {
+	
+	this.imageObj = new Image();
+	
+	this.imageLoaded = false;
+	
+	this.imageObj.onload = function() {
+	console.log("image loaded");
+		this.imageLoaded = true;
+	};
+	this.imageObj.src = 'leaf4.png';
+
+
+	this.checkImage();
+		
+	this.turtle_x = 0;
+	this.turtle_y = 0;
+	this.turtle_r = 0;
+	this.turtle_theta = 0;
+
+	this.LEFT_WIDTH_FACTOR   = Math.pow(2, -1/this.LEFT_ALPHA);
+	this.RIGHT_WIDTH_FACTOR  = Math.pow(2, -1/this.RIGHT_ALPHA);
+	this.LEFT_HEIGHT_FACTOR  = Math.pow(2, -2/(3*this.LEFT_ALPHA));
+	this.RIGHT_HEIGHT_FACTOR = Math.pow(2, -2/(3*this.RIGHT_ALPHA));
+	
+	this.LEAF_LEVEL = Math.floor(3 * this.MAX_LEVEL / 4); // What iteration the leaf color kicks in 
+
+	this.colorSteps = this.getColorSteps(this.STEM_COLOR, this.LEAF_COLOR, this.MAX_LEVEL - this.LEAF_LEVEL);
+	
+	this.currentHeight = this.HEIGHT; 
+	
+	this.frames = 0;
+	
+	this.level = this.MAX_LEVEL;
+	
+}
+
+this.drawFullGrown = function() {
+	this.currentHeight = this.HEIGHT;
+	this.level = this.MAX_LEVEL;
+	this.draw();
+}
+
+this.startGrowing = function() {
+	this.frames = 0;
+	this.level = 0;
+	this.timer = setInterval(this.draw.bind(this), REFRESH_RATE);
+}
+
+this.draw = function() {
+
+	context.strokeStyle = this.STEM_COLOR;
+	context.lineWidth = this.MAX_STEM_WIDTH;
+	
+	
+	// Clear the previous canvas state
+	context.fillStyle = "#333333";
+	context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+	
+	var x1 = 0;
+	var y1 = -1.5 * CANVAS_HEIGHT / 2;
+
+	// MIDDLE 
+	
+	this.turtle_theta = this.point(0, 0, 0, 1);
+	
+	this.generate(
+		x1, y1, 
+		this.RIGHT_WIDTH_FACTOR, 
+		this.RIGHT_HEIGHT_FACTOR * this.currentHeight * this.MIDDLE_HEIGHT_FACTOR, 
+		this.level
+	);
+
+
+	if ( this.level == this.MAX_LEVEL ) {
+		clearInterval(this.timer);
+		return;
+		
+	}
+	
+	this.currentHeight += this.GROWTH_RATE;
+	
+	this.frames++;
+	
+	if ( this.frames % 10 == 0 ) {
+	
+		this.level++;
+	}
+};
+
+/**
+* drawLeaf()
+*
+* @param scaleX		X scaling factor
+* @param scaleY		Y scaling factor
+* @param translateX	X stem target
+* @param translateY	Y stem target
+* @param rotate		rotation angle (radians)
+*/
+this.drawLeaf = function(scaleX, scaleY, translateX, translateY, rotate) {
+	
+		context.save();
+			
+		// move the origin to the target point
+		context.translate(translateX , translateY);
+
+		// rotate the canvas
+		context.rotate( rotate);
+	
+		var w = this.MAX_LEAF_SIZE * scaleX;
+		var h = this.MAX_LEAF_SIZE * scaleY;
+	
+		// draw the image so the stem point (w/2, h) is at the origin 
+		context.drawImage(this.imageObj, 
+			-w/2,		// top left x
+			-h,			// top left y
+			w,			// width of image	
+			h			// height of image
+		);
+	
+		// move the canvas back to original orientation
+		context.restore();
+};
+
+
+
+/**
+ * Recursive function that generates a branch of the plant.
+ * 
+ * @param 	x 		Starting x coord
+ * @param 	y 		Starting y coord
+ * @param 	width 	Ending x coord
+ * @param 	height 	Length of the branch
+ * @param 	level0 	Iteration
+ */
+this.generate = function(x, y, width, height, level0) {
+
+
+	var currentLevel = this.level - level0;
+	
+	this.turtle_x = x;
+	this.turtle_y = y;
+	this.turtle_r = height;
+	
+	// Move turtle
+	this.step();
+	
+	var x1 = this.turtle_x;
+	var y1 = this.turtle_y;
+	
+	if ( currentLevel <= this.LEAF_LEVELS ) { 
+		//TODO this should probably be dividing by LEAF_SCALE or something, 
+		//		not MAX_LEVEL
+		var leafSize = (this.level / currentLevel) / this.MAX_LEVEL;
+		
+		/*// Left leaf
+		this.drawLeaf(
+			leafSize / 3, 
+			leafSize ,
+			x1 + CANVAS_WIDTH / 2 - this.MAX_LEAF_OFFSET  / currentLevel, 
+			CANVAS_HEIGHT/2 - y1,
+			9 * Math.PI / 16
+		);
+		
+		
+		// Right leaf
+		this.drawLeaf(
+			leafSize /3 , 
+			leafSize ,
+			x1 + CANVAS_WIDTH / 2 + this.MAX_LEAF_OFFSET  / currentLevel, 
+			CANVAS_HEIGHT/2 - y1, 
+			-9 * Math.PI / 16
+		);*/
+	}
+	// if the total number of generations(level) is greater than LEAF_LEVEL,
+	// then we'll start working through our gradients, if we're currently
+	// drawing a generateion (currentLevel) above LEAF_LEVEL
+	if ( currentLevel >= this.LEAF_LEVEL ) {
+		var colorIndex = currentLevel - this.LEAF_LEVEL;
+
+		context.strokeStyle = this.colorSteps[colorIndex];
+	} else {
+		context.strokeStyle = this.STEM_COLOR;
+	}
+	
+	if ( level0 == 1 ) {
+		context.lineWidth = 5;
+	} else {
+	
+		context.lineWidth = this.MAX_STEM_WIDTH / currentLevel;
+	}
+	
+	level0--;
+
+	this.drawLine(x, y, x1, y1);
+	
+	if ( level0 > 0) {
+	
+		// LEFT
+		this.turtle_theta = this.point(x, y, x1, y1);
+		this.turtle_theta += this.LEFT_ANGLE+ this.getRandom();
+		this.generate(
+			this.turtle_x, this.turtle_y, 
+			this.LEFT_WIDTH_FACTOR*width,
+			this.LEFT_HEIGHT_FACTOR*height, 
+			level0
+		);
+		
+		// RIGHT
+		this.turtle_theta = this.point(x, y, x1, y1);
+		this.turtle_theta -= this.RIGHT_ANGLE + this.getRandom();
+		this.generate(
+			x1, y1, 
+			this.RIGHT_WIDTH_FACTOR*width, 
+			this.RIGHT_HEIGHT_FACTOR*height, 
+			level0
+		);
+
+		
+		// MIDDLE
+		//y1 = y + HEIGHT * this.MIDDLE_HEIGHT_FACTOR;
+		height = height * this.MIDDLE_HEIGHT_FACTOR;
+		this.turtle_theta = this.point(x, y, x1, y1) + this.getRandom();
+		this.generate(
+			x1, y1,
+			this.RIGHT_WIDTH_FACTOR*width, 
+			this.RIGHT_HEIGHT_FACTOR*height, 
+			level0
+		);
+		
+	}
+};
+
+/**
+ * drawLine - draw a line from (x, y) to (x1, y1).
+ */
+this.drawLine = function (x, y, x1, y1) {
+
+	context.beginPath();
+	context.moveTo(x + CANVAS_WIDTH/2, CANVAS_HEIGHT/2 - y);
+	context.lineTo(x1 + CANVAS_WIDTH/2, CANVAS_HEIGHT/2 - y1);
+	
+	context.stroke();
+};
+
+/**
+ * Point the turtle
+ */
+this.point = function (x1, y1, x2, y2) {
+
+	var theta = 0;
+	
+	if (x2 - x1 == 0) {
+		if (y2 > y1)
+			theta = 90;
+		else 
+			theta = 270;
+	}
+	else {
+		theta = Math.atan((y2 - y1)/(x2 - x1)) * 57.295779;
+	}
+	if (x1 > x2) 
+		theta += 180;
+	
+	return theta;	
+}
+
+/**
+* Move the turtle by turtle_r at angle of turtle_theta.
+* 
+*/
+this.step = function() {
+	this.turtle_x += this.turtle_r * Math.cos(this.turtle_theta * 0.017453292);
+	this.turtle_y += this.turtle_r * Math.sin(this.turtle_theta * 0.017453292);
+	
+};
+this.getRandom = function() {
+	return this.RANDOMNESS * Math.random() - 0.5 * this.RANDOMNESS;
+};
+this.getColorSteps = function (start, stop, steps) {
+
+	var color1 = start.match(/\d+/g);
+	var color2 = stop.match(/\d+/g)
+	
+	var ret = new Array();
+	
+	var chanSteps = new Array(); // Step sizes for r, g, & b
+	
+	for ( var i = 0; i < 3; i++ ) {
+		var c1 = parseInt(color1[i], 10);
+		var c2 = parseInt(color2[i], 10);
+	
+		var diff = c1 - c2;
+		
+		chanSteps[i] = diff / steps;
+	}
+
+	for ( var j = 0; j < steps; j++ ) {
+		
+		var result = "rgb(";
+		
+		for ( var i = 0; i < 3; i++ ) {
+		
+			
+			var c1 = parseInt(color1[i], 10);
+			var c2 = parseInt(color2[i], 10);
+		
+			var step = chanSteps[i] * (j + 1);
+			
+			var inc = c1 - step;
+			
+			inc = (inc > 255) ? 255 : inc;
+			inc = (inc < 0)   ? 0   : inc;
+			
+			result += parseInt(inc, 10);
+			
+			result += (i < 2) ? ", " : ")";  
+		}
+		
+		ret[j] = result;
+
+	}
+
+	return ret;
+};
+} // end Plant
+
+function initControls() {
+
+	$("#MAX_LEVEL").val(plant.MAX_LEVEL);
+	
+	$("#LEFT_ANGLE").val(plant.LEFT_ANGLE);
+	$("#RIGHT_ANGLE").val(plant.RIGHT_ANGLE);
+	
+	$("#LEFT_ALPHA").val(plant.LEFT_ALPHA);
+	$("#RIGHT_ALPHA").val(plant.RIGHT_ALPHA);
+	
+	
+	$("#MIDDLE_HEIGHT_FACTOR").val(plant.MIDDLE_HEIGHT_FACTOR);
+	
+	$("#RANDOMNESS").val(plant.RANDOMNESS);
+	
+	plant.init();
+	plant.drawFullGrown();
+	
+	$("#generate").click($.proxy(function (el) {
+		
+		setVals();
+		
+		plant.init();
+		plant.drawFullGrown();
+	
+	}, this));
+	
+	$("#grow").click($.proxy(function (el) {
+	
+		setVals();
+		
+		plant.init();
+		plant.startGrowing();
+	}, this));
+	
+}
+
+function setVals() {
+	plant.MAX_LEVEL = plant.level = parseInt($("#MAX_LEVEL").val(), 10);
+	
+	plant.LEFT_ANGLE = parseInt($("#LEFT_ANGLE").val(), 10);
+	plant.RIGHT_ANGLE = parseInt($("#RIGHT_ANGLE").val(), 10);
+
+	plant.LEFT_ALPHA = parseFloat($("#LEFT_ALPHA").val(), 10);
+	plant.RIGHT_ALPHA = parseFloat($("#RIGHT_ALPHA").val(), 10);
+	
+	plant.MIDDLE_HEIGHT_FACTOR = parseFloat($("#MIDDLE_HEIGHT_FACTOR").val(), 10);
+	
+	plant.RANDOMNESS = parseFloat($("#RANDOMNESS").val(), 10);
+}
+
+</script>
+
+</head>
+
+<body onload="initialize(); initControls();">
+
+
+<canvas id="canvas" WIDTH="700" height="500">
+	Your browser does not support the HTML5 canvas element.
+</canvas>
+
+<div style="float:right">
+	<form>
+		<label>Iterations</label><input type="number" id="MAX_LEVEL" /><br />
+
+		<label>Left angle</label><input type="number" id="LEFT_ANGLE" /><br />
+		<label>Right angle</label><input type="number" id="RIGHT_ANGLE" /><br />
+		
+		<label>Left alpha</label><input type="number" id="LEFT_ALPHA" /><br />
+		<label>Right alpha</label><input type="number" id="RIGHT_ALPHA" /><br />
+		
+		<label>Middle height factor</label><input type="number" id="MIDDLE_HEIGHT_FACTOR" /><br />
+		
+		<label>Randomness</label><input type="number" id="RANDOMNESS" /><br />
+		
+	</form>
+	<button id="generate">Generate</button>
+	<button id="grow">Grow</button>
+</div>
+</body>
+</html>
